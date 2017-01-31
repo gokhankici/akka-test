@@ -14,6 +14,7 @@ object Barista {
     case object Dirty extends State
   }
   case class Receipt(amount: Int)
+  case object ComebackLater
 }
 
 class Barista extends Actor {
@@ -24,14 +25,17 @@ class Barista extends Actor {
   import akka.util.Timeout
   import akka.pattern.ask
   import akka.pattern.pipe
+  import akka.pattern.AskTimeoutException
   import concurrent.duration._
 
   implicit val timeout = Timeout(4.seconds)
   val register = context.actorOf(Props[Register], "Register")
   def receive = {
     case EspressoRequest =>
-      val receipt = register ? Transaction(Espresso)
-      receipt.map((EspressoCup(Filled), _)).pipeTo(sender)
-    case ClosingTime => context.stop(self)
+        val receipt = register ? Transaction(Espresso)
+        receipt.map((EspressoCup(Filled), _)).recover {
+          case _: AskTimeoutException => ComebackLater
+        } pipeTo(sender)
+    case ClosingTime => context.system.shutdown()
   }
 }
