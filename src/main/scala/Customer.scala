@@ -1,7 +1,6 @@
 import akka.actor._
 import scala.concurrent.duration._
-import akka.actor.OneForOneStrategy
-import akka.actor.SupervisorStrategy._
+
 
 object Customer {
   case object CaffeineWithdrawalWarning

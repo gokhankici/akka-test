@@ -1,7 +1,7 @@
 import akka.actor._
-import scala.concurrent.duration._
-import akka.actor.OneForOneStrategy
-import akka.actor.SupervisorStrategy._
+// import scala.concurrent.duration._
+// import akka.actor.OneForOneStrategy
+// import akka.actor.SupervisorStrategy._
 
 object Barista {
   case object EspressoRequest
@@ -30,6 +30,7 @@ class Barista extends Actor {
 
   implicit val timeout = Timeout(4.seconds)
   val register = context.actorOf(Props[Register], "Register")
+
   def receive = {
     case EspressoRequest =>
         val receipt = register ? Transaction(Espresso)
