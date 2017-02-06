@@ -16,41 +16,62 @@ case class Work(n: Int) extends JobReply
 case class Terminate()  extends JobReply
 
 object MasterStrategy {
+  val intensity: Int = 10
+  val interval: Duration = 1.second
   val defaultDecider: Decider = {
     case _: Exception => Restart
   }
 }
 
-class MasterStrategy(
-  intensity: Int = 10,
-  interval: Duration = 1.second,
-  decider: Decider = MasterStrategy.defaultDecider,
-  master: Master = null
-) extends OneForOneStrategy(intensity, interval)(decider)
-{
-  override def processFailure(
+class MasterStrategy(master: Master) extends SupervisorStrategy {
+  val decider = MasterStrategy.defaultDecider
+
+  def handleChildTerminated(
+    context: ActorContext,
+    child: ActorRef,
+    children: Iterable[ActorRef]
+  ): Unit = ()
+
+  def processFailure(
     context: ActorContext,
     restart: Boolean,
     child: ActorRef,
     cause: Throwable,
     stats: ChildRestartStats,
-    children: Iterable[ChildRestartStats]): Unit =
-  {
-    super.processFailure(context, restart, child, cause, stats, children)
+    children: Iterable[ChildRestartStats]
+  ): Unit = {
+
+    context.stop(child)
+
+    if (restart) {
+      val newJobCount = master.jobCount - master.noOfReqsReceived
+      println(s"[MASTER] Restarting WQ with ${newJobCount} jobs ...")
+      context.actorOf(Props(classOf[WQ], master.workerCount, newJobCount))
+    }
   }
 }
 
-class Master(workerCount: Int, jobCount: Int) extends Actor with ActorLogging {
+class Master(val workerCount: Int, val jobCount: Int) extends Actor with ActorLogging {
   var noOfReqsReceived: Int = 0
   override val supervisorStrategy = new MasterStrategy(master = this)
 
+  import util.Random
+  var failed: Boolean = false
+
   override def preStart(): Unit = {
-    context.actorOf(Props(classOf[WQ], workerCount, jobCount), "WQ")
+    context.actorOf(Props(classOf[WQ], workerCount, jobCount))
     log.info("[MASTER] Started WQ")
+  }
+
+  override def postStop(): Unit = {
+    log.info("[MASTER] Time to sleep ...")
   }
 
   def receive = {
     case Work(n) => {
+      if (Random.nextBoolean()) failed = true
+      if (failed) throw new Exception("[MASTER] OMG, not again!")
+
       log.info(s"[MASTER] Got message number ${n}")
       noOfReqsReceived += 1
 
