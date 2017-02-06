@@ -7,6 +7,7 @@ import scala.concurrent.{ Future, Await }
 import concurrent.duration._
 import akka.actor.SupervisorStrategy._
 import akka.actor.OneForOneStrategy
+import java.util.Calendar
 
 case class StartMessage()
 case class RunMessage()
@@ -18,22 +19,18 @@ object Constants {
 }
 
 object MyStrategy {
-  val defaultIntensity = 1
-  val defaultInterval  = 1.minute
   val defaultDecider: Decider = {
     case _: Exception => Restart
   }
 }
 
-class MyStrategy(intensity: Int, interval: Duration, decider: Decider)
-extends OneForOneStrategy(intensity, interval)(decider) {
-  def this() = {
-    this(MyStrategy.defaultIntensity, MyStrategy.defaultInterval, MyStrategy.defaultDecider)
-  }
-  def this(decider: Decider) = {
-    this(MyStrategy.defaultIntensity, MyStrategy.defaultInterval, decider)
-  }
-
+class MyStrategy(
+  intensity: Int = 10,
+  interval: Duration = 1.second,
+  decider: Decider = MyStrategy.defaultDecider,
+  master: Ping = null
+) extends OneForOneStrategy(intensity, interval)(decider)
+{
   override def processFailure(
     context: ActorContext,
     restart: Boolean,
@@ -43,6 +40,9 @@ extends OneForOneStrategy(intensity, interval)(decider) {
     children: Iterable[ChildRestartStats]): Unit =
   {
     println(s"Supervisor: I'm ${context.self.path}")
+    val today = Calendar.getInstance().getTime()
+    println(s"Supervisor: time = ${today}")
+    println(s"Supervisor: wc = ${master.workerCount}, rc = ${master.responseCount}")
     println(s"Supervisor: Oh, no! ${child} has died ...")
     super.processFailure(context, restart, child, cause, stats, children)
   }
@@ -55,7 +55,7 @@ class Ping extends Actor with ActorLogging {
   val workerCount = 10
   var responseCount = 0
 
-  override val supervisorStrategy = new MyStrategy()
+  override val supervisorStrategy = new MyStrategy(master = this)
 
   override def preStart() {
     log.info("starting ping ...")
